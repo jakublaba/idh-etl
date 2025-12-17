@@ -25,13 +25,11 @@ def _load_gtfs_into_duckdb(
     dbsession: duckdb.DuckDBPyConnection,
 ):
     """
-    Helper for loading whole GTFS feed from Azure Blob Storage into a DuckDB session.
+    Helper for loading a whole GTFS feed from Azure Blob Storage into a DuckDB session.
 
     :param container_client: Client pointing to the desired container (bucket).
     :param feed_prefix: Path/prefix pointing to the desired GTFS feed (without bucket), e.g. '2024/01/01/'.
     :param dbsession: DuckDB session to use.
-    :return: DuckDB connection with GTFS data loaded. Each file is loaded to a separate view named after the file, e.g.
-    'stops.txt/csv' -> 'stops'
     """
     for file_name in GTFS_FILES:
         df = get_csv_as_df(
@@ -47,7 +45,7 @@ def load_gtfs_into_duckdb(
     dbsession: duckdb.DuckDBPyConnection,
 ):
     """
-    Create a DuckDB session with GTFS data loaded from Azure Blob Storage for the given date.
+    Load GTFS data from Azure Blob Storage for the given date into a DuckDB session.
     Each file is loaded into a separate corresponding view, e.g. 'stops.txt/csv' -> 'stops'
 
     GTFS is only updated if it changes, so the exact date might be missing - in that case, the latest available feed
@@ -55,9 +53,7 @@ def load_gtfs_into_duckdb(
 
     :param blob_service_client: Client pointing to the desired Azure Blob Storage account.
     :param as_of: Date for which to load the GTFS feed.
-    :param dbsession: (Optional) Existing DuckDB session to use. New session is created if not provided.
-    If provided, you don't have to reassign the session to the return value of this function.
-    :return: DuckDB connection with GTFS data loaded.
+    :param dbsession: Existing DuckDB session to use.
     """
 
     date_fmt = "YYYY/MM/DD/"
