@@ -36,6 +36,11 @@ def _load_gtfs_into_duckdb(
             container_client,
             f"{feed_prefix}{file_name}.{GTFS_FILE_EXTENSION}",
         )
+        # handle view replacement
+        dbsession.execute(
+            "drop view if exists ?",
+            [file_name],
+        )
         dbsession.register(file_name, df)
 
 
