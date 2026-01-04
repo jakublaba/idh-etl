@@ -79,6 +79,21 @@ left join route_stops_mode rs on r.route_id = rs.route_id
 STOP_DIM_QUERY = """
 """
 
-# todo
 VEHICLE_DIM_QUERY = """
+SELECT
+                vehicle_number AS id,
+                manufacturer AS brand,
+                type AS v_model,
+                CAST(production_year AS INTEGER) AS year_produced
+            FROM vehicles_raw
+            WHERE
+                vehicle_number IS NOT NULL
+                AND TRIM(vehicle_number) != ''
+                AND manufacturer IS NOT NULL
+                AND TRIM(manufacturer) != ''
+                AND type IS NOT NULL
+                AND TRIM(type) != ''
+                AND production_year IS NOT NULL
+                AND CAST(production_year AS VARCHAR) ~ '^[0-9]+$'
+            ORDER BY vehicle_number
 """
