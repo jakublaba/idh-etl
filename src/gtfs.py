@@ -6,11 +6,9 @@ from azure.storage.blob import ContainerClient, BlobServiceClient
 
 from src.blob_storage import get_csv_as_df, date_prefixes_for_container
 
-# don't need feed metadata like feed_info or agency
+# we only need a subset of GTFS files for our analysis
 GTFS_FILES = [
-    "calendar_dates",
     "routes",
-    "shapes",
     "stop_times",
     "stops",
     "trips",

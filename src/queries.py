@@ -9,7 +9,6 @@
     3. most frequent value of stops_per_trip per each route is approx. stops_amount
 """
 
-# todo double check this vibecoded query on some sample data
 LINE_DIM_QUERY = """
 with trip_lengths as (
     select
@@ -58,7 +57,7 @@ route_stops_mode as (
     where rn = 1
 )
 select
-    r.route_id as line_label,
+    r.route_id as id,
     v.carrier as operator,
     case r.route_type
         when 0 then 'tram'
@@ -70,7 +69,7 @@ select
     coalesce(rs.stops_amount, 0) as stops_amount
 from routes r
 left join delays d on r.route_id = d."Route"
-left join vehicle v on d."Vehicle No" = v.vehicle_number
+left join vehicles v on d."Vehicle No" = v.vehicle_number
 left join route_length_mode rl on r.route_id = rl.route_id
 left join route_stops_mode rs on r.route_id = rs.route_id
 """
@@ -82,10 +81,6 @@ select
     cast(stop_lat as float) as lat,
     cast(stop_lon as float) as lon
 from stops
-"""
-
-# todo
-DELAY_DIM_QUERY = """
 """
 
 VEHICLE_DIM_QUERY = """
@@ -105,4 +100,38 @@ where
     and production_year is not null
     and cast(production_year as varchar) ~ '^\d+$'
 order by vehicle_number
+"""
+
+WEATHER_DIM_QUERY = """
+select
+    id,
+    temperature,
+    fall_mm,
+    fall_type,
+    wind_speed_mps,
+    wind_direction_deg,
+    humidity_percent,
+    pressure_hpa,
+    general_circumstances
+from weather
+"""
+
+TIME_DIM_QUERY = """
+select
+    id,
+    full_timestamp,
+    hour_,
+    weekday,
+    weekday_num,
+    month_,
+    month_num,
+    season,
+    year_,
+    time_of_day,
+    is_business_day
+from time_dim
+"""
+
+DELAY_FACT_QUERY = """
+
 """

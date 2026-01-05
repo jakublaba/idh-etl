@@ -7,3 +7,4 @@ class Table(enum.Enum):
     DELAYS = "DelayDim"
     VEHICLE = "VehicleDim"
     WEATHER = "WeatherDim"
+    TIME = "TimeDim"
