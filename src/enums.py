@@ -9,6 +9,7 @@ from src.queries import (
     VEHICLE_DIM_QUERY,
     WEATHER_DIM_QUERY,
     TIME_DIM_QUERY,
+    DELAY_FACT_QUERY,
 )
 from src.schemas import (
     LINE_DIM_SCHEMA,
@@ -16,15 +17,17 @@ from src.schemas import (
     VEHICLE_DIM_SCHEMA,
     WEATHER_DIM_SCHEMA,
     TIME_DIM_SCHEMA,
+    DELAY_FACT_SCHEMA,
 )
 
 
-class DimTable(enum.Enum):
+class Table(enum.Enum):
     LINE = ("LineDim", LINE_DIM_SCHEMA, LINE_DIM_QUERY)
     STOP = ("StopDim", STOP_DIM_SCHEMA, STOP_DIM_QUERY)
     VEHICLE = ("VehicleDim", VEHICLE_DIM_SCHEMA, VEHICLE_DIM_QUERY)
     WEATHER = ("WeatherDim", WEATHER_DIM_SCHEMA, WEATHER_DIM_QUERY)
     TIME = ("TimeDim", TIME_DIM_SCHEMA, TIME_DIM_QUERY)
+    DELAY = ("DelayFact", DELAY_FACT_SCHEMA, DELAY_FACT_QUERY)
 
     def __init__(
         self,

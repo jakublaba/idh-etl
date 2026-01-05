@@ -1,5 +1,6 @@
 import datetime
 import os
+from typing import Optional
 
 import dotenv
 import duckdb
@@ -13,25 +14,36 @@ from pendulum import DateTime
 
 from src.bigquery import write_df_to_bigquery
 from src.delays import load_delays_into_duckdb
-from src.enums import DimTable
+from src.enums import Table
 from src.gtfs import load_gtfs_into_duckdb, GTFS_FILES
 from src.time_utils import MONTH_MAP, get_season, get_time_of_day
 from src.vehicles import load_vehicles_into_duckdb
 from src.weather import load_weather_into_duckdb
 
+DUCKDB_SHARDS = {
+    "time": ["time_dim"],
+    "gtfs": GTFS_FILES,
+    "delays": ["delays"],
+    "vehicles": ["vehicles"],
+    "weather": ["weather"],
+}
 
-def duckdb_path(logical_date: DateTime):
-    return f"/tmp/idh-{logical_date.strftime('%Y%m%d_%H%M%S')}.duckdb"
+
+def duckdb_path(logical_date: DateTime, shard: Optional[str] = None) -> str:
+    path = f"/tmp/idh-{logical_date.strftime('%Y%m%d_%H%M%S')}.duckdb"
+    if shard is not None:
+        path = path.replace(".duckdb", f"-{shard}.duckdb")
+    return path
 
 
 DEFAULT_ARGS = {
-    "retries": 5,
+    "retries": 3,
     "retry_delay": datetime.timedelta(seconds=30),
 }
 
 
 @dag(
-    schedule="@daily",
+    schedule="@hourly",
     start_date=datetime.datetime(2024, 12, 8),
     end_date=datetime.datetime(2025, 1, 2),
     catchup=True,
@@ -75,7 +87,7 @@ def idh_etl():
                 }
             )
 
-            with duckdb.connect(duckdb_path(logical_date)) as dbsession:
+            with duckdb.connect(duckdb_path(logical_date, "time")) as dbsession:
                 tmp_view_name = "_tmp_time"
                 dbsession.register(tmp_view_name, df)
                 dbsession.execute("drop table if exists time_dim")
@@ -86,54 +98,74 @@ def idh_etl():
 
         @task
         def gtfs(logical_date: DateTime):
-            with duckdb.connect(duckdb_path(logical_date)) as dbsession:
+            with duckdb.connect(duckdb_path(logical_date, "gtfs")) as dbsession:
                 load_gtfs_into_duckdb(
                     blob_service_client,
                     logical_date.date(),
                     dbsession,
                 )
-                tables = dbsession.execute("show tables").df()
-                log.info(f"Tables after load: {tables}")
             log.info("GTFS loaded into DuckDB")
 
         @task
         def delays(logical_date: DateTime):
-            with duckdb.connect(duckdb_path(logical_date)) as dbsession:
+            with duckdb.connect(duckdb_path(logical_date, "delays")) as dbsession:
                 load_delays_into_duckdb(
                     blob_service_client,
                     logical_date.date(),
                     dbsession,
                 )
-                tables = dbsession.execute("show tables").df()
-                log.info(f"Tables after load: {tables}")
             log.info("DELAYS loaded into DuckDB")
 
         @task
         def vehicles(logical_date: DateTime):
-            with duckdb.connect(duckdb_path(logical_date)) as dbsession:
+            with duckdb.connect(duckdb_path(logical_date, "vehicles")) as dbsession:
                 load_vehicles_into_duckdb(
                     blob_service_client,
                     dbsession,
                 )
-                tables = dbsession.execute("show tables").df()
-                log.info(f"Tables after load: {tables}")
             log.info("VEHICLES loaded into DuckDB")
 
         @task
         def weather(logical_date: DateTime):
-            with duckdb.connect(duckdb_path(logical_date)) as dbsession:
+            with duckdb.connect(duckdb_path(logical_date, "weather")) as dbsession:
                 load_weather_into_duckdb(
                     blob_service_client,
                     logical_date.date(),
                     dbsession,
                 )
-                tables = dbsession.execute("show tables").df()
-                log.info(f"Tables after load: {tables}")
             log.info("WEATHER loaded into DuckDB")
 
         @task
+        def merge_shards(logical_date: DateTime):
+            target_path = duckdb_path(logical_date)
+            with duckdb.connect(target_path) as dbsession:
+                for shard_name, tables in DUCKDB_SHARDS.items():
+                    log.info(f"Merging shard: {shard_name}")
+                    shard_path = duckdb_path(logical_date, shard_name)
+                    if not os.path.exists(shard_path):
+                        log.warning(
+                            f"Shard path does not exist: {shard_path}, skipping"
+                        )
+                        continue
+                    shard_alias = f"shard_{shard_name}"
+                    dbsession.execute(
+                        f"attach database '{shard_path}' as {shard_alias}"
+                    )
+
+                    for t in tables:
+                        dbsession.execute(
+                            f"create or replace table {t} as select * from {shard_alias}.{t}"
+                        )
+
+                    dbsession.execute(f"detach database {shard_alias}")
+                    os.remove(shard_path)
+                    log.info(
+                        f"Successfully merged {shard_alias} and removed {shard_path}"
+                    )
+
+        @task
         def verify(logical_date: DateTime):
-            tables = [*GTFS_FILES, "vehicles"]
+            tables = [*GTFS_FILES, "delays", "vehicles", "weather", "time_dim"]
             with duckdb.connect(duckdb_path(logical_date)) as dbsession:
                 show_tables = dbsession.execute("show tables").df()
                 log.info(f"Tables at verification step: {show_tables}")
@@ -145,19 +177,21 @@ def idh_etl():
                     except Exception as e:
                         log.error(f"Failed to query table: {t} - {e}")
 
-        # sequentially to avoid having to configure duckdb concurrency
-        time() >> gtfs() >> delays() >> vehicles() >> weather() >> verify()
+        [time(), gtfs(), delays(), vehicles(), weather()] >> merge_shards() >> verify()
 
     @task
-    def write_dim_to_bigquery(
-        table: DimTable,
+    def write_table_to_bigquery(
+        table: Table,
         logical_date: DateTime,
     ):
         log.info(f"Writing {table.bigquery_table} to BigQuery")
         with duckdb.connect(duckdb_path(logical_date), read_only=True) as dbsession:
+            df = dbsession.execute(table.duckdb_query).df()
+            log.info(f"Writing {len(df)} rows to {table.bigquery_table}")
+            log.info(f"Sample: {df.head(10)}")
             write_df_to_bigquery(
                 bigquery_client,
-                dbsession.execute(table.duckdb_query).df(),
+                df,
                 table.schema,
                 table.bigquery_table,
             )
@@ -172,7 +206,7 @@ def idh_etl():
 
     (
         load_duckdb()
-        >> write_dim_to_bigquery.expand(table=list(DimTable))
+        >> write_table_to_bigquery.expand(table=list(Table))
         >> clean_up_duckdb_file()
     )
 

@@ -31,6 +31,18 @@ def _merge_delay_files(
     return pd.DataFrame() if not dfs else pd.concat(dfs)
 
 
+def _normalize_delay(delay_str: str) -> int:
+    sign = -1 if "min przed czasem" in delay_str else 1
+    cleaned_str = delay_str.replace(" min przed czasem", "").replace(" min", "")
+    return sign * int(cleaned_str)
+
+
+# we use hourly granularity, truncating rest of the timestamp to be joinable to TimeDim timestamps
+def _normalize_timestamp(timestamp_str: str) -> str:
+    dt = pendulum.parse(timestamp_str)
+    return dt.strftime("%Y-%m-%dT%H:00:00.000000")
+
+
 def load_delays_into_duckdb(
     blob_service_client: BlobServiceClient,
     as_of: pendulum.Date,
@@ -39,15 +51,13 @@ def load_delays_into_duckdb(
     container_client = blob_service_client.get_container_client(DELAYS_BUCKET)
     df = _merge_delay_files(container_client, as_of)
 
-    # Ensure 'Vehicle No' is always a string (preserve missing values as None)
-    if "Vehicle No" in df.columns:
-        # Convert values to Python str while keeping NaNs as None so DuckDB sees them as NULLs
-        df["Vehicle No"] = df["Vehicle No"].apply(
-            lambda x: None if pd.isna(x) else str(x)
-        )
+    df["Vehicle No"] = df["Vehicle No"].apply(lambda x: None if pd.isna(x) else str(x))
+    df["Delay"] = df["Delay"].apply(_normalize_delay)
+    df["Timestamp"] = df["Timestamp"].apply(_normalize_timestamp)
 
     tmp_view_name = "_tmp_delays"
     dbsession.register(tmp_view_name, df)
-    dbsession.execute("drop table if exists delays")
-    dbsession.execute("create table delays as select * from _tmp_delays")
+    dbsession.execute(
+        f"create or replace table delays as select * from {tmp_view_name}"
+    )
     dbsession.unregister(tmp_view_name)

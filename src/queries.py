@@ -132,6 +132,19 @@ select
 from time_dim
 """
 
+# todo fix: returns 0 rows
 DELAY_FACT_QUERY = """
-
+select
+    d.Delay as delay_mins,
+    t.id as time_id,
+    w.id as weather_id,
+    v.vehicle_number as vehicle_id,
+    r.route_id as line_id,
+    s.stop_id as stop_id
+from delays d
+join time_dim t on t.full_timestamp = d.Timestamp
+join weather w on w.id = '12375-' || strftime(cast(d.Timestamp as timestamp), '%Y-%m-%d-%H')
+join vehicles v on v.vehicle_number = d."Vehicle No"
+join routes r on r.route_id = d.Route
+join stops s on s.stop_name = d."Stop Name"
 """
