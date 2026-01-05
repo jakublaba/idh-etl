@@ -10,18 +10,18 @@ from google.cloud import bigquery
 from google.oauth2 import service_account
 from pendulum import DateTime
 
-from src.bigquery import write_df_to_bigquery
-from src.enums import Table
-from src.gtfs import load_gtfs_into_duckdb
-from src.queries import LINE_DIM_QUERY, STOP_DIM_QUERY, VEHICLE_DIM_QUERY
-from src.schemas import LINE_DIM_SCHEMA, STOP_DIM_SCHEMA, VEHICLE_DIM_SCHEMA
+from src.gtfs import load_gtfs_into_duckdb, GTFS_FILES
 from src.vehicles import load_vehicles_into_duckdb
+
+
+def duckdb_path(logical_date: DateTime):
+    return f"/tmp/idh-{logical_date.strftime('%Y%m%d_%H%M%S')}.duckdb"
 
 
 @dag(
     schedule="@hourly",
-    start_date=datetime.datetime(2024, 12, 8),
-    end_date=datetime.datetime(2025, 1, 2),
+    start_date=datetime.datetime(2024, 12, 7),
+    end_date=datetime.datetime(2024, 12, 31),
     catchup=True,
     is_paused_upon_creation=True,
 )
@@ -43,9 +43,6 @@ def idh_etl():
         project=bigquery_project_id,
     )
 
-    # in-mem db by default - this is fine
-    dbsession = duckdb.connect()
-
     @task
     def time_dim(logical_date: DateTime):
         log.info(f"Logical date: {logical_date}")
@@ -54,11 +51,14 @@ def idh_etl():
     def load_duckdb():
         @task
         def gtfs(logical_date: DateTime):
-            load_gtfs_into_duckdb(
-                blob_service_client,
-                logical_date.date(),
-                dbsession,
-            )
+            with duckdb.connect(duckdb_path(logical_date)) as dbsession:
+                load_gtfs_into_duckdb(
+                    blob_service_client,
+                    logical_date.date(),
+                    dbsession,
+                )
+                tables = dbsession.execute("show tables").df()
+                log.info(f"Tables after load: {tables}")
             log.info("GTFS loaded into DuckDB")
 
         @task
@@ -66,54 +66,40 @@ def idh_etl():
             pass
 
         @task
-        def vehicles():
-            load_vehicles_into_duckdb(
-                blob_service_client,
-                dbsession,
-            )
+        def vehicles(logical_date: DateTime):
+            with duckdb.connect(duckdb_path(logical_date)) as dbsession:
+                load_vehicles_into_duckdb(
+                    blob_service_client,
+                    dbsession,
+                )
+                tables = dbsession.execute("show tables").df()
+                log.info(f"Tables after load: {tables}")
             log.info("VEHICLES loaded into DuckDB")
 
-        [gtfs(), traffic(), vehicles()]
+        gtfs() >> traffic() >> vehicles()
 
     @task
-    def weather_dim(logical_date: DateTime):
-        pass
+    def verify_duckdb(logical_date: DateTime):
+        tables = [*GTFS_FILES, "vehicles"]
+        with duckdb.connect(duckdb_path(logical_date)) as dbsession:
+            show_tables = dbsession.execute("show tables").df()
+            log.info(f"Tables at verification step: {show_tables}")
+            for t in tables:
+                log.info(f"Verifying table: {t}")
+                try:
+                    dbsession.execute(f"select * from {t} limit 1").df()
+                    log.info(f"Successfully queried table: {t}")
+                except Exception as e:
+                    log.error(f"Failed to query table: {t} - {e}")
 
     @task
-    def line_dim():
-        write_df_to_bigquery(
-            bigquery_client=bigquery_client,
-            df=dbsession.sql(LINE_DIM_QUERY).df(),
-            schema=LINE_DIM_SCHEMA,
-            table=Table.LINE,
-        )
+    def clean_up_duckdb_file(logical_date: DateTime):
+        path = duckdb_path(logical_date)
+        if os.path.exists(path):
+            os.remove(path)
+            log.info(f"Removed DuckDB file at {path}")
 
-    @task
-    def stop_dim():
-        write_df_to_bigquery(
-            bigquery_client=bigquery_client,
-            df=dbsession.sql(STOP_DIM_QUERY).df(),
-            schema=STOP_DIM_SCHEMA,
-            table=Table.STOP,
-        )
-
-    @task
-    def vehicle_dim():
-        write_df_to_bigquery(
-            bigquery_client=bigquery_client,
-            df=dbsession.sql(VEHICLE_DIM_QUERY).df(),
-            schema=VEHICLE_DIM_SCHEMA,
-            table=Table.VEHICLE,
-        )
-
-    @task
-    def delay_fact(logical_date: DateTime):
-        pass
-
-    delay_fact = delay_fact()
-
-    load_duckdb() >> [line_dim(), stop_dim(), vehicle_dim()] >> delay_fact
-    [time_dim(), weather_dim()] >> delay_fact
+    load_duckdb() >> verify_duckdb() >> clean_up_duckdb_file()
 
 
 idh_etl()

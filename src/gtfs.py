@@ -29,22 +29,18 @@ def _load_gtfs_into_duckdb(
 
     :param container_client: Client pointing to the desired container (bucket).
     :param feed_prefix: Path/prefix pointing to the desired GTFS feed (without bucket), e.g. '2024/01/01/'.
-    :param dbsession: DuckDB session to use.
     """
     for file_name in GTFS_FILES:
         blob_name = f"{feed_prefix}/{file_name}.{GTFS_FILE_EXTENSION}"
-        try:
-            df = get_csv_as_df(
-                container_client,
-                blob_name,
-            )
-            # handle view replacement
-            dbsession.execute(
-                f"drop view if exists {file_name}",
-            )
-            dbsession.register(file_name, df)
-        except Exception:
-            raise Exception(f"Failed to load {blob_name}")
+        df = get_csv_as_df(
+            container_client,
+            blob_name,
+        )
+        temp_reg_name = f"_tmp_{file_name}"
+        dbsession.execute(f"drop table if exists {file_name}")
+        dbsession.register(temp_reg_name, df)
+        dbsession.execute(f"create table {file_name} as select * from {temp_reg_name}")
+        dbsession.unregister(temp_reg_name)
 
 
 def load_gtfs_into_duckdb(
