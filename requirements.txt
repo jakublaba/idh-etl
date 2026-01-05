@@ -1,4 +1,3 @@
-pendulum
 # stupid workaround because I don't want to fight with astro not liking uv
 azure-core>=1.36.0
 azure-storage-blob>=12.27.1
