@@ -75,8 +75,17 @@ left join route_length_mode rl on r.route_id = rl.route_id
 left join route_stops_mode rs on r.route_id = rs.route_id
 """
 
-# todo
 STOP_DIM_QUERY = """
+select
+    stop_id as id,
+    stop_name as name,
+    cast(stop_lat as float) as lat,
+    cast(stop_lon as float) as lon
+from stops
+"""
+
+# todo
+DELAY_DIM_QUERY = """
 """
 
 VEHICLE_DIM_QUERY = """
@@ -85,7 +94,7 @@ select
     manufacturer as brand,
     type as v_model,
     cast(production_year as integer) as year_produced
-from vehicle
+from vehicles
 where
     vehicle_number is not null
     and trim(vehicle_number) != ''
