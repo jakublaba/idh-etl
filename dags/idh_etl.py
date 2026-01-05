@@ -13,22 +13,8 @@ from pendulum import DateTime
 
 from src.bigquery import write_df_to_bigquery
 from src.delays import load_delays_into_duckdb
-from src.enums import Table
+from src.enums import DimTable
 from src.gtfs import load_gtfs_into_duckdb, GTFS_FILES
-from src.queries import (
-    LINE_DIM_QUERY,
-    STOP_DIM_QUERY,
-    VEHICLE_DIM_QUERY,
-    WEATHER_DIM_QUERY,
-    TIME_DIM_QUERY,
-)
-from src.schemas import (
-    LINE_DIM_SCHEMA,
-    STOP_DIM_SCHEMA,
-    VEHICLE_DIM_SCHEMA,
-    WEATHER_DIM_SCHEMA,
-    TIME_DIM_SCHEMA,
-)
 from src.time_utils import MONTH_MAP, get_season, get_time_of_day
 from src.vehicles import load_vehicles_into_duckdb
 from src.weather import load_weather_into_duckdb
@@ -163,66 +149,19 @@ def idh_etl():
         time() >> gtfs() >> delays() >> vehicles() >> weather() >> verify()
 
     @task
-    def time_dim(logical_date: DateTime):
-        log.info(f"Logical date: {logical_date}")
-
-        log.info("Writing TimeDim to BigQuery")
-        with duckdb.connect(duckdb_path(logical_date)) as dbsession:
+    def write_dim_to_bigquery(
+        table: DimTable,
+        logical_date: DateTime,
+    ):
+        log.info(f"Writing {table.bigquery_table} to BigQuery")
+        with duckdb.connect(duckdb_path(logical_date), read_only=True) as dbsession:
             write_df_to_bigquery(
                 bigquery_client,
-                dbsession.execute(TIME_DIM_QUERY).df(),
-                TIME_DIM_SCHEMA,
-                Table.TIME,
+                dbsession.execute(table.duckdb_query).df(),
+                table.schema,
+                table.bigquery_table,
             )
-        log.info("Successfully written TimeDim to BigQuery")
-
-    @task
-    def weather_dim(logical_date: DateTime):
-        log.info("Writing WeatherDim to BigQuery")
-        with duckdb.connect(duckdb_path(logical_date)) as dbsession:
-            write_df_to_bigquery(
-                bigquery_client,
-                dbsession.execute(WEATHER_DIM_QUERY).df(),
-                WEATHER_DIM_SCHEMA,
-                Table.WEATHER,
-            )
-        log.info("Successfully written WeatherDim to BigQuery")
-
-    @task
-    def line_dim(logical_date: DateTime):
-        log.info("Writing LineDim to BigQuery")
-        with duckdb.connect(duckdb_path(logical_date)) as dbsession:
-            write_df_to_bigquery(
-                bigquery_client,
-                dbsession.execute(LINE_DIM_QUERY).df(),
-                LINE_DIM_SCHEMA,
-                Table.LINE,
-            )
-        log.info("Successfully written LineDim to BigQuery")
-
-    @task
-    def stop_dim(logical_date: DateTime):
-        log.info("Writing StopDim to BigQuery")
-        with duckdb.connect(duckdb_path(logical_date)) as dbsession:
-            write_df_to_bigquery(
-                bigquery_client,
-                dbsession.execute(STOP_DIM_QUERY).df(),
-                STOP_DIM_SCHEMA,
-                Table.STOP,
-            )
-        log.info("Successfully written StopDim to BigQuery")
-
-    @task
-    def vehicle_dim(logical_date: DateTime):
-        log.info("Writing VehicleDim to BigQuery")
-        with duckdb.connect(duckdb_path(logical_date)) as dbsession:
-            write_df_to_bigquery(
-                bigquery_client,
-                dbsession.execute(VEHICLE_DIM_QUERY).df(),
-                VEHICLE_DIM_SCHEMA,
-                Table.VEHICLE,
-            )
-        log.info("Successfully written VehicleDim to BigQuery")
+        log.info(f"Successfully written {table.bigquery_table} to BigQuery")
 
     @task
     def clean_up_duckdb_file(logical_date: DateTime):
@@ -233,12 +172,7 @@ def idh_etl():
 
     (
         load_duckdb()
-        >> time_dim()
-        >> weather_dim()
-        >> line_dim()
-        >> stop_dim()
-        >> vehicle_dim()
-        # >> delay_fact()
+        >> write_dim_to_bigquery.expand(table=list(DimTable))
         >> clean_up_duckdb_file()
     )
 

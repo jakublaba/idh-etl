@@ -5,8 +5,6 @@ import dotenv
 import pandas as pd
 from google.cloud import bigquery
 
-from src.enums import Table
-
 dotenv.load_dotenv()
 PROJECT_ID = os.getenv("BIGQUERY_PROJECT_ID")
 DATESET_ID = os.getenv("DATASET_ID")
@@ -16,7 +14,7 @@ def write_df_to_bigquery(
     bigquery_client: bigquery.Client,
     df: pd.DataFrame,
     schema: List[bigquery.SchemaField],
-    table: Table,
+    bigquery_table: str,
 ):
     job_config = bigquery.LoadJobConfig(
         schema=schema,
@@ -24,7 +22,7 @@ def write_df_to_bigquery(
     )
     write_job = bigquery_client.load_table_from_dataframe(
         dataframe=df,
-        destination=f"{PROJECT_ID}.{DATESET_ID}.{table.value}",
+        destination=f"{PROJECT_ID}.{DATESET_ID}.{bigquery_table}",
         job_config=job_config,
     )
 
