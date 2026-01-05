@@ -76,6 +76,7 @@ def idh_etl():
                 log.info(f"Tables after load: {tables}")
             log.info("VEHICLES loaded into DuckDB")
 
+        # sequentially to avoid having to configure duckdb concurrency
         gtfs() >> traffic() >> vehicles()
 
     @task
