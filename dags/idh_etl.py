@@ -20,7 +20,7 @@ from src.vehicles import load_vehicles_into_duckdb
 
 @dag(
     schedule="@hourly",
-    start_date=datetime.datetime(2024, 12, 1),
+    start_date=datetime.datetime(2024, 12, 8),
     end_date=datetime.datetime(2025, 1, 2),
     catchup=True,
     is_paused_upon_creation=True,
@@ -28,7 +28,7 @@ from src.vehicles import load_vehicles_into_duckdb
 def idh_etl():
     dotenv.load_dotenv()
     az_blob_conn_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-    gcp_credentials_file = os.getenv("GCP_CREDENTIALS_FILE")
+    gcp_credentials_file = "gcp-credentials.json"
     bigquery_project_id = os.getenv("BIGQUERY_PROJECT_ID")
     dataset_id = os.getenv("DATASET_ID")
 
@@ -56,7 +56,7 @@ def idh_etl():
         def gtfs(logical_date: DateTime):
             load_gtfs_into_duckdb(
                 blob_service_client,
-                logical_date,
+                logical_date.date(),
                 dbsession,
             )
             log.info("GTFS loaded into DuckDB")

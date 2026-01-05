@@ -70,7 +70,7 @@ select
     coalesce(rs.stops_amount, 0) as stops_amount
 from routes r
 left join delays d on r.route_id = d."Route"
-left join vehicles v on d."Vehicle No" = v.vehicle_number
+left join vehicle v on d."Vehicle No" = v.vehicle_number
 left join route_length_mode rl on r.route_id = rl.route_id
 left join route_stops_mode rs on r.route_id = rs.route_id
 """
@@ -80,20 +80,20 @@ STOP_DIM_QUERY = """
 """
 
 VEHICLE_DIM_QUERY = """
-SELECT
-                vehicle_number AS id,
-                manufacturer AS brand,
-                type AS v_model,
-                CAST(production_year AS INTEGER) AS year_produced
-            FROM vehicles_raw
-            WHERE
-                vehicle_number IS NOT NULL
-                AND TRIM(vehicle_number) != ''
-                AND manufacturer IS NOT NULL
-                AND TRIM(manufacturer) != ''
-                AND type IS NOT NULL
-                AND TRIM(type) != ''
-                AND production_year IS NOT NULL
-                AND CAST(production_year AS VARCHAR) ~ '^[0-9]+$'
-            ORDER BY vehicle_number
+select
+    vehicle_number as id,
+    manufacturer as brand,
+    type as v_model,
+    cast(production_year as integer) as year_produced
+from vehicle
+where
+    vehicle_number is not null
+    and trim(vehicle_number) != ''
+    and manufacturer is not null
+    and trim(manufacturer) != ''
+    and type is not null
+    and trim(type) != ''
+    and production_year is not null
+    and cast(production_year as varchar) ~ '^\d+$'
+order by vehicle_number
 """

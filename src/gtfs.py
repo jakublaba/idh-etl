@@ -32,16 +32,19 @@ def _load_gtfs_into_duckdb(
     :param dbsession: DuckDB session to use.
     """
     for file_name in GTFS_FILES:
-        df = get_csv_as_df(
-            container_client,
-            f"{feed_prefix}{file_name}.{GTFS_FILE_EXTENSION}",
-        )
-        # handle view replacement
-        dbsession.execute(
-            "drop view if exists ?",
-            [file_name],
-        )
-        dbsession.register(file_name, df)
+        blob_name = f"{feed_prefix}/{file_name}.{GTFS_FILE_EXTENSION}"
+        try:
+            df = get_csv_as_df(
+                container_client,
+                blob_name,
+            )
+            # handle view replacement
+            dbsession.execute(
+                f"drop view if exists {file_name}",
+            )
+            dbsession.register(file_name, df)
+        except Exception:
+            raise Exception(f"Failed to load {blob_name}")
 
 
 def load_gtfs_into_duckdb(
@@ -60,8 +63,7 @@ def load_gtfs_into_duckdb(
     :param as_of: Date for which to load the GTFS feed.
     :param dbsession: Existing DuckDB session to use.
     """
-
-    date_fmt = "YYYY/MM/DD/"
+    date_fmt = "YYYY/MM/DD"
     container_client = blob_service_client.get_container_client(GTFS_BUCKET)
     for p1, p2 in pairwise(date_prefixes_for_container(container_client)):
         d1 = pendulum.from_format(p1, date_fmt).date()

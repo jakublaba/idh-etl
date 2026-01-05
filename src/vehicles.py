@@ -3,7 +3,7 @@ from azure.storage.blob import BlobServiceClient
 
 from src.blob_storage import get_csv_as_df
 
-VEHICLES_BUCKET = "vehicles"
+VEHICLES_BUCKET = "vehicle"
 VEHICLES_FILE_NAME = "ztm_vehicles_detailed.csv"
 
 

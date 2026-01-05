@@ -1,7 +1,8 @@
 import io
-from typing import Iterator
+from typing import Iterator, Set
 
 import pandas as pd
+import pendulum
 from azure.storage.blob import ContainerClient
 
 
@@ -21,23 +22,23 @@ def get_csv_as_df(container_client: ContainerClient, blob_name: str) -> pd.DataF
 
 def date_prefixes_for_container(container_client: ContainerClient) -> Iterator[str]:
     """
-    Lazy iterator which yields available dates based on prefixes present in the container.
-    This assumes a file structure in Azure Blob Storage like <container>/YYYY/MM/DD/...
-
-    :param container_client: Client pointing to the desired container (bucket).
-    :return: Iterator of date prefixes in the format 'YYYY/MM/DD'.
+    Deterministic iterator that yields date prefixes in chronological order (YYYY/MM/DD).
+    It scans blob names, extracts the first three path components, deduplicates them
+    and yields them sorted by parsed date.
     """
-    for year in container_client.walk_blobs(delimiter="/"):
-        if not year.name or not year.name.endswith("/"):
-            continue
+    prefixes: Set[str] = set()
 
-        for month in container_client.walk_blobs(
-            delimiter="/", name_starts_with=year.name
+    for blob in container_client.list_blobs():
+        parts = blob.name.split("/")
+        if (
+            len(parts) >= 3
+            and parts[0].isdigit()
+            and parts[1].isdigit()
+            and parts[2].isdigit()
         ):
-            if not month.name or not month.name.endswith("/"):
-                continue
-            for day in container_client.walk_blobs(
-                delimiter="/", name_starts_with=month.name
-            ):
-                if day.name and not day.name.endswith("/"):
-                    yield day.name
+            # normalize zero-padding
+            prefix = f"{parts[0]}/{parts[1].zfill(2)}/{parts[2].zfill(2)}"
+            prefixes.add(prefix)
+
+    for prefix in sorted(prefixes, key=lambda s: pendulum.from_format(s, "YYYY/MM/DD")):
+        yield prefix
