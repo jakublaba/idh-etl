@@ -38,9 +38,9 @@ def _normalize_delay(delay_str: str) -> int:
 
 
 # we use hourly granularity, truncating rest of the timestamp to be joinable to TimeDim timestamps
-def _normalize_timestamp(timestamp_str: str) -> str:
+def _normalize_timestamp(timestamp_str: str) -> pd.Timestamp:
     dt = pendulum.parse(timestamp_str)
-    return dt.strftime("%Y-%m-%dT%H:00:00.000000")
+    return pd.Timestamp(dt).floor("h")
 
 
 def load_delays_into_duckdb(

@@ -132,7 +132,6 @@ select
 from time_dim
 """
 
-# todo fix: returns 0 rows
 DELAY_FACT_QUERY = """
 select
     d.Delay as delay_mins,
