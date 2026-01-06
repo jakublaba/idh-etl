@@ -48,4 +48,11 @@ TIME_DIM_SCHEMA = [
     SchemaField("is_business_day", "BOOL", mode="REQUIRED"),
 ]
 
-DELAY_FACT_SCHEMA = []
+DELAY_FACT_SCHEMA = [
+    SchemaField("delay_mins", "INT64", mode="REQUIRED"),
+    SchemaField("time_id", "INT64", mode="REQUIRED"),
+    SchemaField("weather_id", "STRING", mode="REQUIRED"),
+    SchemaField("vehicle_id", "STRING", mode="REQUIRED"),
+    SchemaField("line_id", "STRING", mode="REQUIRED"),
+    SchemaField("stop_id", "STRING", mode="REQUIRED"),
+]

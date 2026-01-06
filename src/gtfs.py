@@ -27,6 +27,7 @@ def _load_gtfs_into_duckdb(
 
     :param container_client: Client pointing to the desired container (bucket).
     :param feed_prefix: Path/prefix pointing to the desired GTFS feed (without bucket), e.g. '2024/01/01/'.
+    :param dbsession: Existing DuckDB session to use.
     """
     for file_name in GTFS_FILES:
         blob_name = f"{feed_prefix}/{file_name}.{GTFS_FILE_EXTENSION}"

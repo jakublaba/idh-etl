@@ -15,13 +15,14 @@ def load_vehicles_into_duckdb(
     Load vehicles data from Azure Blob Storage into a DuckDB session.
 
     :param blob_service_client: Client pointing to the desired Azure Blob Storage account.
+    :param dbsession: Existing DuckDB session to use.
     """
     container_client = blob_service_client.get_container_client(VEHICLES_BUCKET)
     df = get_csv_as_df(
         container_client,
         VEHICLES_FILE_NAME,
     )
-    # Persist the dataframe into the DuckDB database as a table so it survives across task boundaries.
+
     temp_reg_name = "_tmp_vehicles"
     dbsession.execute("drop table if exists vehicles")
     dbsession.register(temp_reg_name, df)

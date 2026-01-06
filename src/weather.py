@@ -159,6 +159,7 @@ def load_weather_into_duckdb(
     df = _apply_weather_transformations(merged_df)
     temp_view_name = "_tmp_weather"
     dbsession.register(temp_view_name, df)
-    dbsession.execute("drop table if exists weather")
-    dbsession.execute(f"create table weather as select * from {temp_view_name}")
+    dbsession.execute(
+        f"create or replace table weather as select * from {temp_view_name}"
+    )
     dbsession.unregister(temp_view_name)
