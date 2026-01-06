@@ -192,21 +192,33 @@ def idh_etl():
 
     @task
     def write_table_to_bigquery(
-        table: Table,
-        logical_date: DateTime,
+            table: Table,
+            logical_date: DateTime,
     ):
         log.info(f"Writing {table.bigquery_table} to BigQuery")
         with duckdb.connect(duckdb_path(logical_date), read_only=True) as dbsession:
             df = dbsession.execute(table.duckdb_query).df()
-            log.info(f"Writing {len(df)} rows to {table.bigquery_table}")
-            log.info(f"Sample: {df.head(10)}")
+            log.info(f"Fetched {len(df)} rows from DuckDB for {table.bigquery_table}")
+
+            # Query BigQuery for existing keys
+            key_columns = table.unique_key_columns  # e.g. ['id']
+            keys_str = ', '.join(key_columns)
+            query = f"SELECT {keys_str} FROM `{table.bigquery_table}`"
+            existing_keys_df = bigquery_client.query(query).to_dataframe()
+
+            # Filter out rows already present
+            merged = df.merge(existing_keys_df, on=key_columns, how='left', indicator=True)
+            new_rows = merged[merged['_merge'] == 'left_only'].drop(columns=['_merge'])
+            log.info(f"Uploading {len(new_rows)} new rows to {table.bigquery_table}")
+            log.info(f"Sample: {new_rows.head(10)}")
+
             write_df_to_bigquery(
                 bigquery_client,
-                df,
+                new_rows,
                 table.schema,
                 table.bigquery_table,
             )
-        log.info(f"Successfully written {table.bigquery_table} to BigQuery")
+        log.info(f"Successfully written new rows to {table.bigquery_table} in BigQuery")
 
     @task
     def clean_up_duckdb_file(logical_date: DateTime):
