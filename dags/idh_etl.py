@@ -28,9 +28,20 @@ DUCKDB_SHARDS = {
     "weather": ["weather"],
 }
 
+DUCKDB_VOLUME_PATH = "/usr/local/airflow/duckdb"
+
 
 def duckdb_path(logical_date: DateTime, shard: Optional[str] = None) -> str:
-    path = f"/tmp/idh-{logical_date.strftime('%Y%m%d_%H%M%S')}.duckdb"
+    f"""
+    Construct the DuckDB file path.
+
+    :param logical_date: Used to format name of the db file - ensures uniqueness per run.
+    :param shard: Optional shard name used for loading partial data concurrently as DuckDB only supports a single
+    write connection at a time.
+    :return: Path to DuckDB file, e.g. `{DUCKDB_VOLUME_PATH}/idh-20241225_120000.duckdb` or
+    `{DUCKDB_VOLUME_PATH}/idh-20241225_120000-gtfs.duckdb` if shard was provided.
+    """
+    path = f"{DUCKDB_VOLUME_PATH}/idh-{logical_date.strftime('%Y%m%d_%H%M%S')}.duckdb"
     if shard is not None:
         path = path.replace(".duckdb", f"-{shard}.duckdb")
     return path

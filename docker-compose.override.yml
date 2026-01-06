@@ -1,0 +1,4 @@
+services:
+  scheduler:
+    volumes:
+      - ./.duckdb:/usr/local/airflow/duckdb
